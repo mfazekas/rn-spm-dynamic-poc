@@ -33,4 +33,13 @@ Pod::Spec.new do |s|
     requirement: { kind: "exactVersion", version: "6.26.0" },
     products: ["RiveRuntime"]
   )
+
+  # Binary package whose framework is named differently from the product: Sentry-Dynamic is
+  # Sentry.framework, so it has to be listed in embed_frameworks.
+  spm_dependency(s,
+    url: "https://github.com/getsentry/sentry-cocoa.git",
+    requirement: { kind: "exactVersion", version: "9.29.2" },
+    products: ["Sentry-Dynamic"],
+    embed_frameworks: ["Sentry"]
+  )
 end

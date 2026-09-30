@@ -14,7 +14,8 @@
 - (NSString *)getVersion {
     UseAlamofire *af = [[UseAlamofire alloc] init];
     UseRiveRuntime *rive = [[UseRiveRuntime alloc] init];
-    return [NSString stringWithFormat:@"%@\n%@", [af getVersion], [rive getVersion]];
+    UseSentry *sentry = [[UseSentry alloc] init];
+    return [NSString stringWithFormat:@"%@\n%@\n%@", [af getVersion], [rive getVersion], [sentry getVersion]];
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
