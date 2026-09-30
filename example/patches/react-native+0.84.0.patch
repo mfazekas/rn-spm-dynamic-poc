@@ -1,5 +1,5 @@
 diff --git a/node_modules/react-native/scripts/cocoapods/spm.rb b/node_modules/react-native/scripts/cocoapods/spm.rb
-index 0995dfb..1a2b0f5 100644
+index 0995dfb..acf1025 100644
 --- a/node_modules/react-native/scripts/cocoapods/spm.rb
 +++ b/node_modules/react-native/scripts/cocoapods/spm.rb
 @@ -4,13 +4,36 @@
@@ -9,9 +9,9 @@ index 0995dfb..1a2b0f5 100644
 +  EMBED_FUNCTION = 'install_spm_framework'
 +  SIGNATURE_PHASE_NAME = '[RN] Remove duplicate Swift package xcframework signatures'
 +
-+  # $1 is the framework name, $2 the build directory of the pod using it. Xcode puts binary targets next to
-+  # the pod, and source packages in PackageFrameworks (UninstalledProducts when archiving). Frameworks that
-+  # are missing (the product is not dynamic) or statically linked are part of their consumer already.
++  # Embeds framework $1 of the pod built in $2, looking where Xcode puts binary targets (next to the pod) and
++  # source packages (PackageFrameworks, or UninstalledProducts when archiving); static frameworks are linked
++  # into their consumer and a framework that is not found is skipped, so a misspelled name fails only at launch.
 +  EMBED_FUNCTION_SOURCE = <<~'SH'
 +    install_spm_framework()
 +    {
@@ -52,14 +52,12 @@ index 0995dfb..1a2b0f5 100644
        log_warning "If you're using Xcode 15 or earlier you might need to close and reopen the Xcode workspace"
        unless ENV["USE_FRAMEWORKS"] == "dynamic"
          @dependencies_by_pod.each do |pod_name, dependencies|
-@@ -53,6 +80,51 @@ class SPMManager
+@@ -53,6 +80,49 @@ class SPMManager
  
    private
  
-+  # CocoaPods' "[CP] Embed Pods Frameworks" only embeds frameworks it knows about, so dynamic
-+  # frameworks that Swift packages add to a pod never reach the app bundle and the app fails at launch
-+  # with dyld "Library not loaded" (in Debug simulator builds source packages still load, through an
-+  # rpath into the build directory).
++  # CocoaPods' "[CP] Embed Pods Frameworks" script only embeds the frameworks of pods, so without these
++  # calls the app fails at launch with dyld "Library not loaded" for a Swift package framework.
 +  def add_embed_frameworks(installer)
 +    installer.aggregate_targets.each do |aggregate_target|
 +      pod_targets = aggregate_target.pod_targets.select { |t| @dependencies_by_pod.key?(t.name) }
@@ -77,8 +75,8 @@ index 0995dfb..1a2b0f5 100644
 +      calls = pod_targets.map do |pod_target|
 +        dependencies = @dependencies_by_pod[pod_target.name]
 +        frameworks = dependencies.flat_map { |d| d[:embed_frameworks] }.uniq
-+        # The requirements are listed so that changing them changes this script, which is an input of
-+        # the embed phase, and the phase runs again.
++        # Listing the requirements makes a version change rewrite this script, an input of the embed phase,
++        # so the phase runs again and copies the new frameworks.
 +        "# #{pod_target.name}: #{dependencies.map { |d| "#{d[:url]} #{d[:requirement]}" }.join(', ')}\n" +
 +          frameworks.map { |f| "#{EMBED_FUNCTION} \"#{f}\" \"${PODS_CONFIGURATION_BUILD_DIR}/#{pod_target.label}\"\n" }.join
 +      end
@@ -87,9 +85,9 @@ index 0995dfb..1a2b0f5 100644
 +    end
 +  end
 +
-+  # Xcode processes a binary target's xcframework both for the pod and for the app that links it, and
-+  # Xcode 26 archives fail on the two identically named signatures ("... .xcframework-ios.signature
-+  # couldn't be copied to Signatures because an item with the same name already exists").
++  # Xcode writes a binary target's xcframework signature both to the shared build directory and to the pod's,
++  # and Xcode 26 archives fail on the duplicate ("couldn't be copied to Signatures because an item with the
++  # same name already exists"), so the pod's copy is removed.
 +  def add_signature_cleanup(project)
 +    @dependencies_by_pod.each_key do |pod_name|
 +      target = project.targets.find { |t| t.name == pod_name }
@@ -105,7 +103,7 @@ index 0995dfb..1a2b0f5 100644
      ::Pod::UI.puts "[SPM] #{msg}"
    end
 diff --git a/node_modules/react-native/scripts/react_native_pods.rb b/node_modules/react-native/scripts/react_native_pods.rb
-index 231f420..e9c0145 100644
+index 231f420..adb1708 100644
 --- a/node_modules/react-native/scripts/react_native_pods.rb
 +++ b/node_modules/react-native/scripts/react_native_pods.rb
 @@ -334,8 +334,10 @@ end
@@ -114,8 +112,8 @@ index 231f420..e9c0145 100644
  # - products: The product/target of the Swift Package Manager dependency (eg. AlamofireDynamic)
 -def spm_dependency(spec, url:, requirement:, products:)
 -  SPM.dependency(spec, url: url, requirement: requirement, products: products)
-+# - embed_frameworks: The dynamic frameworks the products bring, which are embedded in the app. Defaults to
-+#   the product names; set it when they differ (eg. the Sentry-Dynamic product is Sentry.framework)
++# - embed_frameworks: The names of the dynamic frameworks the products provide, embedded in the app (eg. Sentry for
++#   the Sentry-Dynamic product). Defaults to the product names. A name that matches no framework is not reported
 +def spm_dependency(spec, url:, requirement:, products:, embed_frameworks: products)
 +  SPM.dependency(spec, url: url, requirement: requirement, products: products, embed_frameworks: embed_frameworks)
  end
