@@ -1,28 +1,47 @@
 diff --git a/node_modules/react-native/scripts/cocoapods/spm.rb b/node_modules/react-native/scripts/cocoapods/spm.rb
-index 0995dfb..2ad3a1c 100644
+index 0995dfb..1a2b0f5 100644
 --- a/node_modules/react-native/scripts/cocoapods/spm.rb
 +++ b/node_modules/react-native/scripts/cocoapods/spm.rb
-@@ -4,13 +4,18 @@
+@@ -4,13 +4,36 @@
  # LICENSE file in the root directory of this source tree.
  
  class SPMManager
-+  EMBED_FUNCTION = 'install_spm_frameworks'
++  EMBED_FUNCTION = 'install_spm_framework'
 +  SIGNATURE_PHASE_NAME = '[RN] Remove duplicate Swift package xcframework signatures'
++
++  # $1 is the framework name, $2 the build directory of the pod using it. Xcode puts binary targets next to
++  # the pod, and source packages in PackageFrameworks (UninstalledProducts when archiving). Frameworks that
++  # are missing (the product is not dynamic) or statically linked are part of their consumer already.
++  EMBED_FUNCTION_SOURCE = <<~'SH'
++    install_spm_framework()
++    {
++      local dir
++      for dir in "$2" "${PODS_CONFIGURATION_BUILD_DIR}/PackageFrameworks" "${OBJROOT}/UninstalledProducts/${PLATFORM_NAME}"; do
++        if [ -d "$dir/$1.framework" ]; then
++          if file -b "$dir/$1.framework/$1" | grep -q "dynamically linked"; then
++            install_framework "$dir/$1.framework"
++          fi
++          return
++        fi
++      done
++    }
++  SH
 +
    def initialize()
       @dependencies_by_pod = {}
    end
  
-   def dependency(pod_spec, url:, requirement:,  products:)
+-  def dependency(pod_spec, url:, requirement:,  products:)
++  def dependency(pod_spec, url:, requirement:,  products:, embed_frameworks: products)
      @dependencies_by_pod[pod_spec.name] ||= []
 -    @dependencies_by_pod[pod_spec.name] << { url: url, requirement: requirement, products: products}
-+    dependency = { url: url, requirement: requirement, products: products }
++    dependency = { url: url, requirement: requirement, products: products, embed_frameworks: embed_frameworks }
 +    # CocoaPods can evaluate a podspec several times during one install.
 +    @dependencies_by_pod[pod_spec.name] << dependency unless @dependencies_by_pod[pod_spec.name].include?(dependency)
    end
  
    def apply_on_post_install(installer)
-@@ -42,6 +47,10 @@ class SPMManager
+@@ -42,6 +65,10 @@ class SPMManager
      end
  
      unless @dependencies_by_pod.empty?
@@ -33,7 +52,7 @@ index 0995dfb..2ad3a1c 100644
        log_warning "If you're using Xcode 15 or earlier you might need to close and reopen the Xcode workspace"
        unless ENV["USE_FRAMEWORKS"] == "dynamic"
          @dependencies_by_pod.each do |pod_name, dependencies|
-@@ -53,6 +62,86 @@ class SPMManager
+@@ -53,6 +80,51 @@ class SPMManager
  
    private
  
@@ -57,50 +76,15 @@ index 0995dfb..2ad3a1c 100644
 +
 +      calls = pod_targets.map do |pod_target|
 +        dependencies = @dependencies_by_pod[pod_target.name]
-+        products = dependencies.flat_map { |d| d[:products] }.uniq
++        frameworks = dependencies.flat_map { |d| d[:embed_frameworks] }.uniq
 +        # The requirements are listed so that changing them changes this script, which is an input of
 +        # the embed phase, and the phase runs again.
-+        "# #{pod_target.name}: #{dependencies.map { |d| "#{d[:url]} #{d[:requirement]}" }.join(', ')}\n" \
-+        "#{EMBED_FUNCTION} \"${PODS_CONFIGURATION_BUILD_DIR}/#{pod_target.label}\" \"#{pod_target.product_name}\" " \
-+        "#{products.map { |p| "\"#{p}\"" }.join(' ')}\n"
++        "# #{pod_target.name}: #{dependencies.map { |d| "#{d[:url]} #{d[:requirement]}" }.join(', ')}\n" +
++          frameworks.map { |f| "#{EMBED_FUNCTION} \"#{f}\" \"${PODS_CONFIGURATION_BUILD_DIR}/#{pod_target.label}\"\n" }.join
 +      end
-+      File.write(script_path, script.sub(anchor) { "#{embed_function_source}#{calls.join}#{$&}" })
++      File.write(script_path, script.sub(anchor) { "#{EMBED_FUNCTION_SOURCE}#{calls.join}#{$&}" })
 +      log " Embedding Swift package frameworks of #{pod_targets.map(&:name).join(', ')} in #{aggregate_target.name}"
 +    end
-+  end
-+
-+  def embed_function_source
-+    <<~'SH'
-+      # Embeds the dynamic frameworks of a pod's Swift packages: $1 is the pod's build directory, $2 the
-+      # pod's own product, the rest are the package products it uses.
-+      install_spm_frameworks()
-+      {
-+        local pod_dir="$1" pod_product="$2" framework product dir
-+        shift 2
-+        # Binary targets are copied next to the pod, under the xcframework's name, not the product's.
-+        for framework in "$pod_dir"/*.framework; do
-+          [ -d "$framework" ] && [ "$(basename "$framework")" != "$pod_product" ] || continue
-+          install_spm_framework_if_dynamic "$framework"
-+        done
-+        # Dynamic library products of source packages are built once per build, named after the product.
-+        for product in "$@"; do
-+          for dir in "${PODS_CONFIGURATION_BUILD_DIR}/PackageFrameworks" "${OBJROOT}/UninstalledProducts/${PLATFORM_NAME}" "$pod_dir/PackageFrameworks"; do
-+            if [ -d "$dir/$product.framework" ]; then
-+              install_spm_framework_if_dynamic "$dir/$product.framework"
-+              break
-+            fi
-+          done
-+        done
-+      }
-+
-+      # Statically linked frameworks are already part of their consumer and must not be embedded.
-+      install_spm_framework_if_dynamic()
-+      {
-+        if file -b "$1/$(basename "$1" .framework)" | grep -q "dynamically linked"; then
-+          install_framework "$1"
-+        fi
-+      }
-+    SH
 +  end
 +
 +  # Xcode processes a binary target's xcframework both for the pod and for the app that links it, and
@@ -120,3 +104,20 @@ index 0995dfb..2ad3a1c 100644
    def log(msg)
      ::Pod::UI.puts "[SPM] #{msg}"
    end
+diff --git a/node_modules/react-native/scripts/react_native_pods.rb b/node_modules/react-native/scripts/react_native_pods.rb
+index 231f420..e9c0145 100644
+--- a/node_modules/react-native/scripts/react_native_pods.rb
++++ b/node_modules/react-native/scripts/react_native_pods.rb
+@@ -334,8 +334,10 @@ end
+ # - url: The URL of the Swift Package Manager dependency
+ # - requirement: The version requirement of the Swift Package Manager dependency (eg. ` {kind: 'upToNextMajorVersion', minimumVersion: '5.9.1'},`)
+ # - products: The product/target of the Swift Package Manager dependency (eg. AlamofireDynamic)
+-def spm_dependency(spec, url:, requirement:, products:)
+-  SPM.dependency(spec, url: url, requirement: requirement, products: products)
++# - embed_frameworks: The dynamic frameworks the products bring, which are embedded in the app. Defaults to
++#   the product names; set it when they differ (eg. the Sentry-Dynamic product is Sentry.framework)
++def spm_dependency(spec, url:, requirement:, products:, embed_frameworks: products)
++  SPM.dependency(spec, url: url, requirement: requirement, products: products, embed_frameworks: embed_frameworks)
+ end
+ 
+ # It returns the default flags.
