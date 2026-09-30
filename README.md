@@ -22,22 +22,24 @@ pod install
 
 # How it works:
 
-1. The library `.podspec` defines two Swift Package Manager dependencies: a source package building a dynamic framework (`AlamofireDynamic`) and a binary target (`RiveRuntime`):
+1. The library `.podspec` defines three Swift Package Manager dependencies: a source package building a dynamic framework (`AlamofireDynamic`), a binary target (`RiveRuntime`), and a binary target whose framework is named differently from its product (`Sentry-Dynamic` is `Sentry.framework`), which it declares with `embed_frameworks`:
 
-https://github.com/mfazekas/rn-spm-dynamic-poc/blob/3a9cd65da2f3f2fc1203538019470a0dd09d6d59/RnSpmDynamicPoc.podspec#L21-L35
+https://github.com/mfazekas/rn-spm-dynamic-poc/blob/c40072cae5229ab4afaa98bfc70616926dfb630e/RnSpmDynamicPoc.podspec#L21-L44
 
 2. There is a react-native [patchfile](https://github.com/mfazekas/rn-spm-dynamic-poc/blob/main/example/patches/react-native%2B0.84.0.patch) that:
-   - adds an `install_spm_frameworks` call to the app's `[CP] Embed Pods Frameworks` script for every pod with SPM dependencies. At build time it embeds the dynamic frameworks of the pod's binary targets (`$PODS_CONFIGURATION_BUILD_DIR/<pod>/`) and of its source package products (`$PODS_CONFIGURATION_BUILD_DIR/PackageFrameworks/`, or `$OBJROOT/UninstalledProducts/<platform>/` when archiving), and skips static ones
+   - adds an `embed_frameworks` parameter to `spm_dependency`: the dynamic frameworks the products bring, defaulting to the product names
+   - adds an `install_spm_framework <name> <pod build dir>` line per framework to the app's `[CP] Embed Pods Frameworks` script. At build time it looks for the framework next to the pod (binary targets), then in `$PODS_CONFIGURATION_BUILD_DIR/PackageFrameworks/` (source packages) or `$OBJROOT/UninstalledProducts/<platform>/` (source packages when archiving), and embeds it unless it is missing or static
    - adds a build phase to the pod removing its copy of `*.xcframework-*.signature`. Xcode processes a binary target's xcframework for both the pod and the app, and Xcode 26 archives fail on the duplicate
 
-   https://github.com/mfazekas/rn-spm-dynamic-poc/blob/803db8fee90bcb578f0b96535c422923ff25b739/example/patches/react-native%2B0.84.0.patch#L44-L118
+   https://github.com/mfazekas/rn-spm-dynamic-poc/blob/72a1187369b98bead3f396b9ba8d63e1c2fcff7c/example/patches/react-native%2B0.84.0.patch
 
 To see the crash, remove `example/patches` and reinstall `react-native`.
 
 | Xcode 26.5, RN 0.84.0 | stock | patched |
 | --- | --- | --- |
 | Debug simulator launch | dyld crash (`RiveRuntime`) | launches |
-| Release archive | fails (duplicate signature) | succeeds, both frameworks embedded |
+| Release archive | fails (duplicate signature) | succeeds, all three frameworks embedded |
+| Patched, without `embed_frameworks: ["Sentry"]` | | dyld crash (`Sentry`) |
 
 # Limitations/known issues:
 
