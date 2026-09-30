@@ -17,4 +17,20 @@ Pod::Spec.new do |s|
   s.private_header_files = "ios/**/*.h"
 
   install_modules_dependencies(s)
+
+  # Source package: AlamofireDynamic is `type: .dynamic` in Alamofire's Package.swift, so Xcode builds
+  # it into the shared $PODS_CONFIGURATION_BUILD_DIR/PackageFrameworks/AlamofireDynamic.framework.
+  spm_dependency(s,
+    url: "https://github.com/Alamofire/Alamofire.git",
+    requirement: { kind: "upToNextMajorVersion", minimumVersion: "5.9.1" },
+    products: ["AlamofireDynamic"]
+  )
+
+  # Binary package: RiveRuntime is a prebuilt dynamic xcframework, which Xcode places at
+  # <pod build dir>/RiveRuntime.framework.
+  spm_dependency(s,
+    url: "https://github.com/rive-app/rive-ios.git",
+    requirement: { kind: "exactVersion", version: "6.26.0" },
+    products: ["RiveRuntime"]
+  )
 end

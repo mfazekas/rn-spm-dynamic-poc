@@ -10,8 +10,10 @@ require Pod::Executable.execute_command('node', ['-p',
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
-linkage = ENV['USE_FRAMEWORKS']
-if linkage != nil
+# Dynamic by default: with static libraries, source packages such as AlamofireDynamic are not
+# linked into the app at all (see the warning `spm_dependency` prints).
+linkage = ENV.fetch('USE_FRAMEWORKS', 'dynamic')
+if linkage != 'none'
   Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
   use_frameworks! :linkage => linkage.to_sym
 end
@@ -21,7 +23,6 @@ target 'RnSpmDynamicPocExample' do
 
   use_react_native!(
     :path => config[:reactNativePath],
-    # An absolute path to your application root.
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
@@ -30,7 +31,6 @@ target 'RnSpmDynamicPocExample' do
       installer,
       config[:reactNativePath],
       :mac_catalyst_enabled => false,
-      # :ccache_enabled => true
     )
   end
 end
