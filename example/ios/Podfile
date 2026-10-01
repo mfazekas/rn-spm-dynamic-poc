@@ -21,6 +21,9 @@ end
 target 'RnSpmDynamicPocExample' do
   config = use_native_modules!
 
+  pod 'SpmPackagesDemo', :path => './SpmPackagesDemo'
+
+
   use_react_native!(
     :path => config[:reactNativePath],
     :app_path => "#{Pod::Config.instance.installation_root}/.."

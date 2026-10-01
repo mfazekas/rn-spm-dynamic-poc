@@ -41,6 +41,21 @@ To see the crash, remove `example/patches` and reinstall `react-native`.
 | Release archive | fails (duplicate signature) | succeeds, all three frameworks embedded |
 | Patched, without `embed_frameworks: ["Sentry"]` | | dyld crash (`Sentry`) |
 
+# More packages (this branch)
+
+[`example/ios/SpmPackagesDemo`](example/ios/SpmPackagesDemo/SpmPackagesDemo.podspec) adds packages whose frameworks are not named after their product:
+
+| Package | Dynamic frameworks to embed |
+| --- | --- |
+| AgoraRtcEngine_iOS `RtcBasic` | `AgoraRtcKit`, `Agorafdkaac`, `Agoraffmpeg`, `AgoraSoundTouch`, `video_dec`, and `aosl` from the AgoraInfra_iOS package it depends on |
+| mapbox-maps-ios `MapboxMaps` (source) | `MapboxCommon`, `MapboxCoreMaps`, `Turf`, binary targets of the packages it depends on |
+| stripe-ios `StripePaymentSheet` | none, Xcode links it statically |
+| firebase-ios-sdk `FirebaseAnalytics` | none, static binaries |
+
+With the frameworks listed in `embed_frameworks`, the app has every framework its binaries load, embeds no static one, launches, and archives (30 signatures collected, 15 in the archive). Without them, the 9 Agora and Mapbox frameworks are missing.
+
+With static libraries (`USE_FRAMEWORKS=none`) on react-native main, two pods using `spm_dependency` fail to compile ("Umbrella for module 'RnSpmDynamicPoc' already covers this directory"), and FirebaseAnalytics fails to link (`GoogleAppMeasurement` symbols), as AlamofireDynamic does.
+
 # Limitations/known issues:
 
 - XCode workspace should be closed/reopened for XCode to realize that the package dependency was readded
