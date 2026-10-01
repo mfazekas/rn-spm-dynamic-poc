@@ -51,6 +51,8 @@ To see the crash, remove `example/patches` and reinstall `react-native`.
 
 # See also
 
+https://github.com/react/react-native/pull/58781 - the upstream pull request for this change
+
 https://github.com/facebook/react-native/pull/44627
 
 https://github.com/react-native-community/discussions-and-proposals/issues/587
