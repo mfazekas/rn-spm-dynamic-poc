@@ -58,12 +58,15 @@ With static libraries (`USE_FRAMEWORKS=none`) on react-native main, two pods usi
 
 # Limitations/known issues:
 
+- `embed_frameworks` has to name every dynamic framework the products load, including those of the packages they depend on, which the package's own `Package.swift` does not show (e.g. `MapboxMaps` needs `MapboxCommon`, `MapboxCoreMaps` and `Turf`; Agora's `RtcBasic` product is six frameworks). A missing name is only noticed at launch. The [`more-packages`](https://github.com/mfazekas/rn-spm-dynamic-poc/tree/more-packages) branch tries Agora, Mapbox, Stripe and Firebase
 - XCode workspace should be closed/reopened for XCode to realize that the package dependency was readded
 - Debug simulator builds hide a missing source package framework: Xcode adds an rpath into the build directory, so it loads from the Mac's disk. Devices, Release builds and binary targets crash.
 - When pod install invoked with `USE_FRAMEWORKS=none` (static libraries), source package products such as `AlamofireDynamic` are not linked into the app, and linking fails with undefined symbols
 - The embed phase does not declare the package frameworks as inputs. The requirements are written into the embed script, so changing them in the podspec re-runs it after `pod install`, but a version resolved differently without `pod install` needs a clean build
 
 # See also
+
+https://github.com/react/react-native/pull/58781 - the upstream pull request for this change
 
 https://github.com/facebook/react-native/pull/44627
 
